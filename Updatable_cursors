@@ -1,0 +1,84 @@
+Sometimes, you want to lock a set of rows before you can update them in your program. Oracle provides the FOR UPDATE clause of the SELECT statement in an
+updatable cursor to perform this kind of locking mechanism.
+
+syntax for declaring an updatable cursor:
+CURSOR cursor_name IS
+    SELECT select_clause
+    FROM from_clause
+    WHERE where_clause
+    FOR UPDATE;
+
+The new syntax here is the FOR UPDATE keywords.
+
+Once you open the cursor, Oracle will lock all rows selected by the SELECT ... FOR UPDATE statement in the tables specified in the FROM clause. And these rows will remain locked until the cursor is closed or the transaction is completed with either COMMIT or ROLLBACK.
+
+Note that Oracle locks all rows returned by the SELECT ... FOR UPDATE during the update, therefore, you should have a WHERE clause to select only necessary rows to be locked.
+
+If you have a specific column that you want to update, you can list it in the FOR UPDATE clause as follows:
+
+CURSOR cursor_name IS
+    SELECT select_clause
+    FROM from_clause
+    WHERE where_clause
+    FOR UPDATE OF column_name;
+    
+Example:
+DECLARE
+    -- customer cursor
+    CURSOR c_customers IS 
+        SELECT 
+            customer_id, 
+            name, 
+            credit_limit
+        FROM 
+            customers
+        WHERE 
+            credit_limit > 0 
+        FOR UPDATE OF credit_limit;
+    -- local variables
+    l_order_count PLS_INTEGER := 0;
+    l_increment   PLS_INTEGER := 0;
+    
+BEGIN
+    FOR r_customer IN c_customers
+    LOOP
+        -- get the number of orders of the customer
+        SELECT COUNT(*)
+        INTO l_order_count
+        FROM orders
+        WHERE customer_id = r_customer.customer_id;
+        -- 
+        IF l_order_count >= 5 THEN
+            l_increment := 5;
+        ELSIF l_order_count < 5 AND l_order_count >=2 THEN
+            l_increment := 2;
+        ELSIF l_increment = 1 THEN
+            l_increment := 1;
+        ELSE 
+            l_increment := 0;
+        END IF;
+        
+        IF l_increment > 0 THEN
+            -- update the credit limit
+            UPDATE 
+                customers
+            SET 
+                credit_limit = credit_limit * ( 1 +  l_increment/ 100)
+            WHERE 
+                customer_id = r_customer.customer_id;
+            
+            -- show the customers whose credits are increased
+            dbms_output.put_line('Increase credit for customer ' 
+                || r_customer.NAME || ' by ' 
+                || l_increment || '%' );
+        END IF;
+    END LOOP;
+    
+    EXCEPTION
+        WHEN OTHERS THEN
+            dbms_output.put_line('Error code:' || SQLCODE);
+            dbms_output.put_line('Error message:' || sqlerrm);
+            RAISE;
+            
+END;
+/
